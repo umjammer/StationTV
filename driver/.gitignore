@@ -1,0 +1,7 @@
+# Proprietary controller firmware — extract locally, do not commit.
+firmware/
+*.bin
+
+# Build artifacts
+*.o
+dt195
