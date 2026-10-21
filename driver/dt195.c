@@ -5,6 +5,7 @@
  * shipped DT195Lib.framework. No conditional-access / descrambling logic.
  */
 #include "dt195.h"
+#include "dt195_i2c.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -214,13 +215,9 @@ int dt195_upload_firmware(dt195_device *d, const char *path)
     dt195_control(d, DT195_CTRL_OUT, 0x01 /* TODO request */, 0, 0, &reset, 1,
                   1000);
 
-    /* Step 2: point the controller at its firmware-load register.
-     * DT195Lib writes the load address 0x90074 before streaming. */
-    uint8_t addr[4] = {
-        (uint8_t)(DT195_REG_FW_LOAD >> 24), (uint8_t)(DT195_REG_FW_LOAD >> 16),
-        (uint8_t)(DT195_REG_FW_LOAD >> 8), (uint8_t)(DT195_REG_FW_LOAD)};
-    dt195_control(d, DT195_CTRL_OUT, 0x02 /* TODO request */, 0, 0, addr,
-                  sizeof(addr), 1000);
+    /* Step 2: arm the controller's firmware-load register. DT195Lib writes the
+     * load address 0x90074 before streaming, using vendor request 0xBC. */
+    dt195_reg_write(d, DT195_REG_FW_LOAD, 0);
 
     /* Step 3: stream the blob in DT195_FW_CHUNK pieces to the OUT pipe. */
     uint8_t chunk[DT195_FW_CHUNK];
@@ -256,17 +253,17 @@ int dt195_select_channel(dt195_device *d, dt195_wave_t wave, uint32_t frequency,
 {
     if (!d || !d->handle)
         return -EINVAL;
-    (void)wave;
-    (void)frequency;
-    (void)ts_id;
-    (void)service_id;
-    /* TODO: program the RF front-end (MxL661 / CXD2832AWR) over the
-     * controller's I2C bus, then select the transport stream. This requires
-     * the per-chip register tables from TunerManager / MxL661Manager /
-     * CXD2832AWRManager, which are the next research target. */
-    fprintf(stderr, "dt195: select_channel not yet implemented "
-                    "(RF tuning tables pending)\n");
-    return -ENOSYS;
+    switch (wave) {
+    case DT195_WAVE_TERRESTRIAL:
+        return dt195_tune_terrestrial(d, frequency, ts_id, service_id);
+    case DT195_WAVE_BS:
+    case DT195_WAVE_CS:
+        /* Satellite path: CXD2832AWR tuner + TC90522 (S) demod at I2C 0x22.
+         * Not implemented yet; the terrestrial path is the current target. */
+        fprintf(stderr, "dt195: satellite tuning not implemented yet\n");
+        return -ENOSYS;
+    }
+    return -EINVAL;
 }
 
 int dt195_stream_raw(dt195_device *d, void *fp_, const volatile bool *stop)

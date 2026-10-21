@@ -33,8 +33,34 @@ broadcast-content laws in your jurisdiction.
 | USB vendor ID | `0x06B8` (PIXELA Corporation) |
 | USB product ID | `0x103A` |
 | Controller SoC | Fujitsu/Socionext **MB86M01 "Felis"** (ASSP) |
-| RF tuner front-ends | MaxLinear **MxL661**, Sony **CXD2832AWR** (demod) |
+| Demodulators | Toshiba **TC90522XBG** — terrestrial + satellite (ISDB family) |
+| RF tuner front-ends | MaxLinear **MxL661** (terrestrial), Sony **CXD2832AWR** (satellite) |
 | Transport | USB bulk (TS in), vendor control requests + register read/write for control |
+
+### On-board bus map (from `TunerManager::Initialize`)
+
+The controller bridges to an I²C bus carrying the demod + tuner chips. The demod
+exposes an I²C repeater gate behind which the RF tuner sits — the same topology
+as the Toshiba TC90522-based PLEX px4-family ISDB tuners.
+
+| Chip | Role | I²C addr (8-bit) |
+|------|------|------------------|
+| TC90522XBG (T) | terrestrial demodulator | `0x20` |
+| MxL661 | terrestrial RF tuner (behind demod gate) | `0xC0` |
+| TC90522XBG (S) | satellite demodulator | `0x22` |
+| CXD2832AWR | satellite RF tuner | `0xC0` |
+
+### Control primitives (from `ControlRegisterWrite` / `ControlWriteI2c`)
+
+* **Register access:** vendor control request **`0xBC`** (`bmRequestType`
+  `0x40` out / `0xC0` in), with the 32-bit register address sent big-endian in
+  `wValue:wIndex` and the 32-bit value as the data payload.
+* **I²C bridge:** write the chip-addr/register/data word into the window
+  register **`0x823BE`**, pulse the trigger register **`0x800C0`** (command
+  `0x09`), then read the window back to check the ACK.
+
+These primitives are implemented in `dt195_i2c.c`. The exact window packing and
+trigger value still want a bus-trace confirmation (marked `VERIFY` in the code).
 
 The matching values come from `DT195Lib`'s device-discovery thread
 (`UsbWaitThread`), which builds an `IOUSBDevice` matching dictionary with
@@ -109,10 +135,15 @@ Reconstructed from `SeleneConnectionManager::downloadIdleFirwmware`,
    broadcast TS ("Sys1" = the raw system stream, as opposed to the transcoded
    "play" path), then `getSys1Stream` drains the bulk endpoint into a buffer.
 
-Steps 1–3 are implemented in this skeleton. Steps 4–6 need the per-chip
-register/I2C tables, which are large; the reader (`dt195_stream_raw`) and the
-command plumbing are in place, and the exact tuning tables are the next
-research target — see `TODO` markers in `dt195.c`.
+Steps 1–3 are implemented. Steps 4–5 (terrestrial path) are now scaffolded in
+`dt195_tune.c`: the TC90522 demod init and the MxL661 frequency programming run
+over the I²C bridge, following the public TC90522 + MxL661 ISDB-T model.
+Per-register values not yet confirmed against a bus trace of this device are
+marked `VERIFY`. Step 6 (`startSys1Recv` before draining) is the remaining item
+in the stream path. The satellite path (CXD2832AWR + TC90522-S) is not wired up.
+
+Use `dt195_isdbt_channel_to_hz(ch)` to turn a Japanese UHF physical channel
+(13–62) into the centre frequency for `dt195_select_channel`.
 
 ## Build
 

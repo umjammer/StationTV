@@ -66,6 +66,14 @@ int dt195_select_channel(dt195_device *dev, dt195_wave_t wave,
                          uint32_t frequency, uint16_t ts_id,
                          uint16_t service_id);
 
+/* Convert a Japanese terrestrial UHF physical channel (13..62) to its centre
+ * frequency in Hz. Returns 0 for an out-of-range channel. (dt195_tune.c) */
+uint32_t dt195_isdbt_channel_to_hz(int physical_channel);
+
+/* Bring the terrestrial path up and tune to `frequency` (Hz). (dt195_tune.c) */
+int dt195_tune_terrestrial(dt195_device *dev, uint32_t frequency,
+                           uint16_t ts_id, uint16_t service_id);
+
 /* Read the raw broadcast TS ("Sys1" path) and append it to `fp` until
  * `stop` becomes true or an error occurs. `fp` should be a binary stream.
  * Returns 0 on a clean stop, or a negative error code. */

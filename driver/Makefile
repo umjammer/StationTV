@@ -16,13 +16,15 @@ CFLAGS  += -I$(BREW_PREFIX)/include/libusb-1.0
 LDLIBS  += -L$(BREW_PREFIX)/lib -lusb-1.0
 endif
 
-OBJS = dt195.o main.o
+OBJS = dt195.o dt195_i2c.o dt195_tune.o main.o
 
 dt195: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
-dt195.o: dt195.c dt195.h
-main.o:  main.c dt195.h
+dt195.o:      dt195.c dt195.h dt195_i2c.h
+dt195_i2c.o:  dt195_i2c.c dt195_i2c.h dt195.h
+dt195_tune.o: dt195_tune.c dt195_i2c.h dt195.h
+main.o:       main.c dt195.h
 
 clean:
 	rm -f dt195 $(OBJS)

@@ -33,7 +33,7 @@ static int cmd_info(void)
     return 0;
 }
 
-static int cmd_capture(const char *out)
+static int cmd_capture(const char *out, int channel)
 {
     dt195_device *dev = NULL;
     int r = dt195_open(&dev);
@@ -49,9 +49,15 @@ static int cmd_capture(const char *out)
         return 1;
     }
 
-    /* Tuning is not wired up yet; attempt it so the pipeline is exercised
-     * and the capture loop still runs (it will idle until a stream appears). */
-    dt195_select_channel(dev, DT195_WAVE_TERRESTRIAL, 0, 0, 0);
+    uint32_t hz = dt195_isdbt_channel_to_hz(channel);
+    if (hz == 0) {
+        fprintf(stderr, "invalid terrestrial channel %d (expected 13..62)\n",
+                channel);
+        dt195_close(dev);
+        return 1;
+    }
+    fprintf(stderr, "tuning terrestrial ch %d (%u Hz)...\n", channel, hz);
+    dt195_select_channel(dev, DT195_WAVE_TERRESTRIAL, hz, 0, 0);
 
     FILE *fp = fopen(out, "wb");
     if (!fp) {
@@ -80,13 +86,14 @@ int main(int argc, char **argv)
 {
     if (argc >= 2 && strcmp(argv[1], "info") == 0)
         return cmd_info();
-    if (argc >= 3 && strcmp(argv[1], "capture") == 0)
-        return cmd_capture(argv[2]);
+    if (argc >= 4 && strcmp(argv[1], "capture") == 0)
+        return cmd_capture(argv[2], atoi(argv[3]));
 
     fprintf(stderr,
             "usage:\n"
-            "  %s info             enumerate the device\n"
-            "  %s capture OUT.ts   dump the raw transport stream\n",
+            "  %s info                   enumerate the device\n"
+            "  %s capture OUT.ts CHAN    tune terrestrial channel CHAN (13..62)\n"
+            "                            and dump the raw transport stream\n",
             argv[0], argv[0]);
     return 2;
 }
